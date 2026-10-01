@@ -147,5 +147,75 @@ with st.expander("Methodology and data status"):
     st.write("Source: DTCC/CFTC SDR public dissemination retrieved via OpenBB. Daily levels are medians of filtered on-the-run executed transactions. Direct decimal spread quotes are converted to basis points. On-the-run maturity is selected by reported uncapped notional with maturity prevented from moving backward. A 5-MAD within-day filter removes extreme transaction outliers. Cross-roll changes are excluded and AR(1)/OU statistics are estimated separately by contract regime.")
     st.write(f"Latest data date: **{latest_date.date()}**. Xover current regime: **{int(xo.current_regime_obs)} obs**; Main: **{int(ma.current_regime_obs)} obs**; Xover–Main: **{int(rv.current_regime_obs)} obs**.")
 
+# Downloads and audit
+st.subheader("Exports & data audit")
+dl1,dl2,dl3=st.columns([1,1,1])
+
 csv=hist.to_csv(index=False).encode()
-st.download_button("Download dashboard history CSV",csv,"cds_dashboard_history.csv","text/csv")
+with dl1:
+    st.download_button("Download CSV",csv,"cds_dashboard_history.csv","text/csv",use_container_width=True)
+
+def latex_escape(x):
+    s=str(x)
+    for a,b in [("\\","\\textbackslash{}"),("&","\\&"),("%","\\%"),("$","\\$"),("#","\\#"),("_","\\_"),("{","\\{"),("}","\\}")]:
+        s=s.replace(a,b)
+    return s
+
+def make_latex():
+    pmx=prior_model("Xover"); pmm=prior_model("Main"); pmr=prior_model("Xover-Main")
+    def hl(m): return "N/A" if m is None or pd.isna(m.half_life_obs) else f"{m.half_life_obs:.1f}"
+    rows=[
+        ("Xover 5Y",xo.level_bp,xo.change_1d_bp,xo.change_5obs_bp,xo.current_series_percentile,hl(pmx)),
+        ("Main 5Y",ma.level_bp,ma.change_1d_bp,ma.change_5obs_bp,ma.current_series_percentile,hl(pmm)),
+        ("Xover--Main",rv.level_bp,rv.change_1d_bp,rv.change_5obs_bp,rv.current_series_percentile,hl(pmr)),
+    ]
+    body="\\n".join([f"{latex_escape(n)} & {lv:.2f} & {d1:+.2f} & {d5:+.2f} & {pct:.1f}\\% & {half} \\\\" for n,lv,d1,d5,pct,half in rows])
+    return f"""% European CDS Credit Conditions
+% Generated from DTCC/CFTC SDR-derived dashboard data
+\\begin{{table}}[htbp]
+\\centering
+\\caption{{European CDS Credit Conditions -- {latest_date.date()}}}
+\\begin{{tabular}}{{lrrrrr}}
+\\hline
+Series & Level (bp) & 1D (bp) & 5-obs (bp) & Current-series pct. & Prior OU half-life \\\\
+\\hline
+{body}
+\\hline
+\\end{{tabular}}
+\\end{{table}}
+
+% Current credit read:
+% {direction} {driver}
+% Current Xover-Main regime observations: {int(rv.current_regime_obs)}.
+"""
+with dl2:
+    st.download_button("Download LaTeX",make_latex().encode(),"cds_credit_conditions.tex","text/plain",use_container_width=True)
+
+# Audit the actual dashboard dataset, not just whether files exist
+audit=[]
+def check(label,ok,detail):
+    audit.append({"Check":label,"Status":"PASS" if bool(ok) else "FAIL","Detail":detail})
+
+check("Latest date aligned",snap.date.nunique()==1 and snap.date.max()==hist.date.max(),f"Snapshot/history: {snap.date.max().date()} / {hist.date.max().date()}")
+check("All three series present",set(["Xover","Main","Xover-Main"]).issubset(set(hist.series.unique())),", ".join(sorted(hist.series.unique())))
+check("No missing latest levels",snap.level_bp.notna().all(),f"{snap.level_bp.notna().sum()}/{len(snap)} available")
+check("No duplicate date/series rows",not hist.duplicated(["date","series"]).any(),f"{int(hist.duplicated(['date','series']).sum())} duplicates")
+check("Chronology valid",hist.groupby("series").date.apply(lambda x:x.is_monotonic_increasing).all(),"Dates increase within each series")
+check("Xover latest plausible",25 < float(xo.level_bp) < 2500,f"{xo.level_bp:.2f} bp")
+check("Main latest plausible",5 < float(ma.level_bp) < 500,f"{ma.level_bp:.2f} bp")
+check("RV arithmetic",abs(float(rv.level_bp)-(float(xo.level_bp)-float(ma.level_bp)))<1e-6,f"{rv.level_bp:.2f} bp vs Xover-Main")
+if not rolls.empty:
+    check("Roll table available",len(rolls)>=2,f"{len(rolls)} roll markers")
+if not models.empty:
+    check("OU parameters finite",models.phi.notna().all() and models.half_life_obs.notna().all(),f"{len(models)} completed regime models")
+
+audit_df=pd.DataFrame(audit)
+audit_pass=(audit_df.Status=="PASS").all()
+with dl3:
+    if st.button("Run data audit",use_container_width=True):
+        st.session_state["show_audit"]=True
+
+if st.session_state.get("show_audit",False):
+    st.markdown(f"**Audit result: {'PASS' if audit_pass else 'FAIL'}** · {int((audit_df.Status=='PASS').sum())}/{len(audit_df)} checks passed")
+    st.dataframe(audit_df,hide_index=True,use_container_width=True)
+    st.download_button("Download audit CSV",audit_df.to_csv(index=False).encode(),"cds_data_audit.csv","text/csv")
