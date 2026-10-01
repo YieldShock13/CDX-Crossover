@@ -97,7 +97,7 @@ check("RV arithmetic",abs(float(rv.level_bp)-(float(xo.level_bp)-float(ma.level_
 if not rolls.empty:
     check("Roll table available",len(rolls)>=2,f"{len(rolls)} roll markers")
 if not models.empty:
-    check("Mean-reversion estimates finite",models.phi.notna().all() and models.half_life_obs.notna().all(),f"{len(models)} completed regime models")
+    check("Mean-reversion estimates finite",models.phi.notna().all() and models.half_life_obs.notna().all(),f"{len(models)} completed index-series models")
 
 audit_df=pd.DataFrame(audit)
 audit_pass=(audit_df.Status=="PASS").all()
@@ -155,7 +155,7 @@ else: direction="Recent directional comparison is not yet available."; driver=""
 
 pm=prior_model("Xover-Main")
 model_text=(f"The current Xover–Main regime has only {int(rv.current_regime_obs)} observations, so its mean-reversion estimate is not yet shown. "
-            + (f"The previous completed regime had AR(1) {pm.phi:.3f} and a {pm.half_life_obs:.1f}-observation half-life." if pm is not None else ""))
+            + (f"The previous completed index series had AR(1) {pm.phi:.3f} and a {pm.half_life_obs:.1f}-observation half-life." if pm is not None else ""))
 st.markdown(f"""<div class="read"><h3>Current credit read</h3>
 <b>{direction}</b> {driver}<br>
 Over five observations Xover moved <b>{signed(x5)}</b>, Main <b>{signed(m5)}</b>, and Xover–Main moved <b>{signed(r5)}</b>.
@@ -195,11 +195,11 @@ st.plotly_chart(fig,use_container_width=True)
 pm=prior_model(series)
 c1,c2,c3,c4,c5,c6=st.columns(6)
 c1.metric("Current-series percentile",f"{s.current_series_percentile:.1f}%")
-c2.metric("20D z-score","Building new roll history" if pd.isna(s.zscore_20) else f"{s.zscore_20:.2f}",help=f"Needs 10 observations in the current contract regime. Currently {int(s.current_regime_obs)}/10.")
-c3.metric("60D z-score","Building new roll history" if pd.isna(s.zscore_60) else f"{s.zscore_60:.2f}",help=f"Needs 30 observations in the current contract regime. Currently {int(s.current_regime_obs)}/30.")
-c4.metric("20D spread vol","Building new roll history" if pd.isna(s.realized_vol_20_bp) else f"{s.realized_vol_20_bp:.2f} bp/day",help=f"Needs 10 observations in the current contract regime. Currently {int(s.current_regime_obs)}/10.")
-c5.metric("Current mean-reversion","Building new roll history" if pd.isna(s.ou_half_life_obs) else f"{s.ou_half_life_obs:.1f} obs",help=f"Needs 20 observations in the current contract regime. Currently {int(s.current_regime_obs)}/20.")
-c6.metric("Previous regime half-life","N/A" if pm is None else f"{pm.half_life_obs:.1f} obs")
+c2.metric("20D z-score","Building new roll history" if pd.isna(s.zscore_20) else f"{s.zscore_20:.2f}",help=f"Needs 10 observations in the current index series. Currently {int(s.current_regime_obs)}/10.")
+c3.metric("60D z-score","Building new roll history" if pd.isna(s.zscore_60) else f"{s.zscore_60:.2f}",help=f"Needs 30 observations in the current index series. Currently {int(s.current_regime_obs)}/30.")
+c4.metric("20D spread vol","Building new roll history" if pd.isna(s.realized_vol_20_bp) else f"{s.realized_vol_20_bp:.2f} bp/day",help=f"Needs 10 observations in the current index series. Currently {int(s.current_regime_obs)}/10.")
+c5.metric("Current mean-reversion","Building new roll history" if pd.isna(s.ou_half_life_obs) else f"{s.ou_half_life_obs:.1f} obs",help=f"Needs 20 observations in the current index series. Currently {int(s.current_regime_obs)}/20.")
+c6.metric("Previous index-series half-life","N/A" if pm is None else f"{pm.half_life_obs:.1f} obs")
 
 # Xover vs Main comparison
 st.subheader("Xover vs Main")
@@ -224,7 +224,7 @@ with left:
     st.plotly_chart(f,use_container_width=True)
 with right:
     st.subheader("Relative rolling z-score")
-    st.caption("Compares Xover, Main and Xover–Main on the same standardized scale. Gaps are intentional at index rolls; each series restarts within its new contract regime.")
+    st.caption("Compares Xover, Main and Xover–Main on the same standardized scale. Gaps are intentional at index rolls; each series restarts within its new index series.")
     z=go.Figure()
     for nm in ["Xover","Main","Xover-Main"]:
         zh=hist.loc[hist.series.eq(nm)].sort_values("date").copy()
@@ -253,15 +253,15 @@ if "trade_count" in h.columns and h["trade_count"].notna().any():
 
 # Persistence
 st.subheader("Persistence and mean reversion")
-st.caption("This estimates how long a spread dislocation tends to persist. Half-life is the estimated number of trading observations required for roughly half of a deviation from the regime's statistical equilibrium to decay. A higher AR(1) value means greater persistence. These are statistical diagnostics, not forecasts or fundamental fair values.")
+st.caption("This estimates how long a spread dislocation tends to persist. Half-life is the estimated number of trading observations required for roughly half of a deviation from the index series' statistical equilibrium to decay. A higher AR(1) value means greater persistence. These are statistical diagnostics, not forecasts or fundamental fair values.")
 if not models.empty:
     mm=models.loc[models.series.eq(series)].copy().sort_values("start")
     if len(mm):
         show=mm[["start","end","obs","phi","half_life_obs","long_run_mean_bp","residual_std_bp","persistence"]].copy()
         show.columns=["Start","End","Observations","Persistence coefficient (AR1)","Mean-reversion half-life (obs)","Statistical equilibrium (bp)","Residual volatility (bp)","Persistence"]
         st.dataframe(show,hide_index=True,use_container_width=True)
-st.caption(f"Current regime: {int(s.current_regime_obs)} observations. Mean-reversion estimate requires 20 observations; 20D z-score requires 10; 60D z-score requires 30.")
+st.caption(f"Current index series: {int(s.current_regime_obs)} observations. Mean-reversion estimate requires 20 observations; 20D z-score requires 10; 60D z-score requires 30.")
 
 with st.expander("Methodology and data status"):
-    st.write("Source: DTCC/CFTC SDR public dissemination retrieved via OpenBB. Daily levels are medians of filtered on-the-run executed transactions. Direct decimal spread quotes are converted to basis points. On-the-run maturity is selected by reported uncapped notional with maturity prevented from moving backward. A 5-MAD within-day filter removes extreme transaction outliers. Cross-roll changes are excluded and AR(1)/OU statistics are estimated separately by contract regime.")
+    st.write("Source: DTCC/CFTC SDR public dissemination retrieved via OpenBB. Daily levels are medians of filtered on-the-run executed transactions. Direct decimal spread quotes are converted to basis points. On-the-run maturity is selected by reported uncapped notional with maturity prevented from moving backward. A 5-MAD within-day filter removes extreme transaction outliers. Cross-roll changes are excluded and AR(1)/OU statistics are estimated separately by index series.")
     st.write(f"Latest data date: **{latest_date.date()}**. Xover current regime: **{int(xo.current_regime_obs)} obs**; Main: **{int(ma.current_regime_obs)} obs**; Xover–Main: **{int(rv.current_regime_obs)} obs**.")
