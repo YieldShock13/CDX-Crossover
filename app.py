@@ -78,7 +78,8 @@ Series & Level (bp) & 1D (bp) & 5-obs (bp) & Current-series pct. & Prior Mean-re
 % Current Xover-Main regime observations: {int(rv.current_regime_obs)}.
 """
 with dl2:
-    st.download_button("Download LaTeX",make_latex().encode(),"cds_credit_conditions.tex","text/plain",use_container_width=True)
+    if st.button("LaTeX report",use_container_width=True):
+        st.session_state["page"]="latex"
 
 # Audit the actual dashboard dataset, not just whether files exist
 audit=[]
@@ -101,13 +102,37 @@ if not models.empty:
 audit_df=pd.DataFrame(audit)
 audit_pass=(audit_df.Status=="PASS").all()
 with dl3:
-    if st.button("Run data audit",use_container_width=True):
-        st.session_state["show_audit"]=True
+    if st.button("Data audit",use_container_width=True):
+        st.session_state["page"]="audit"
 
-if st.session_state.get("show_audit",False):
-    st.markdown(f"**Audit result: {'PASS' if audit_pass else 'FAIL'}** · {int((audit_df.Status=='PASS').sum())}/{len(audit_df)} checks passed")
+if "page" not in st.session_state:
+    st.session_state["page"]="dashboard"
+
+if st.session_state["page"]=="latex":
+    top_left,top_right=st.columns([8,1])
+    with top_left:
+        st.header("LaTeX report")
+        st.caption("Ready-to-copy LaTeX generated from the latest dashboard state.")
+    with top_right:
+        if st.button("Close",key="close_latex",use_container_width=True):
+            st.session_state["page"]="dashboard"
+            st.rerun()
+    st.code(make_latex(),language="latex",line_numbers=True)
+    st.stop()
+
+if st.session_state["page"]=="audit":
+    top_left,top_right=st.columns([8,1])
+    with top_left:
+        st.header("Data audit")
+        st.caption("Integrity checks on the data currently feeding this dashboard.")
+    with top_right:
+        if st.button("Close",key="close_audit",use_container_width=True):
+            st.session_state["page"]="dashboard"
+            st.rerun()
+    status="PASS" if audit_pass else "FAIL"
+    st.metric("Overall audit",status,f"{int((audit_df.Status=='PASS').sum())}/{len(audit_df)} checks passed")
     st.dataframe(audit_df,hide_index=True,use_container_width=True)
-    st.download_button("Download audit CSV",audit_df.to_csv(index=False).encode(),"cds_data_audit.csv","text/csv")
+    st.stop()
 
 
 
