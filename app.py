@@ -195,10 +195,10 @@ st.plotly_chart(fig,use_container_width=True)
 pm=prior_model(series)
 c1,c2,c3,c4,c5,c6=st.columns(6)
 c1.metric("Current-series percentile",f"{s.current_series_percentile:.1f}%")
-c2.metric("20D z-score",f"Not enough data ({int(s.current_regime_obs)}/10)" if pd.isna(s.zscore_20) else f"{s.zscore_20:.2f}")
-c3.metric("60D z-score",f"Not enough data ({int(s.current_regime_obs)}/30)" if pd.isna(s.zscore_60) else f"{s.zscore_60:.2f}")
-c4.metric("20D spread vol",f"Not enough data ({int(s.current_regime_obs)}/10)" if pd.isna(s.realized_vol_20_bp) else f"{s.realized_vol_20_bp:.2f} bp/day")
-c5.metric("Current mean-reversion",pending(s,20))
+c2.metric("20D z-score","Building new roll history" if pd.isna(s.zscore_20) else f"{s.zscore_20:.2f}",help=f"Needs 10 observations in the current contract regime. Currently {int(s.current_regime_obs)}/10.")
+c3.metric("60D z-score","Building new roll history" if pd.isna(s.zscore_60) else f"{s.zscore_60:.2f}",help=f"Needs 30 observations in the current contract regime. Currently {int(s.current_regime_obs)}/30.")
+c4.metric("20D spread vol","Building new roll history" if pd.isna(s.realized_vol_20_bp) else f"{s.realized_vol_20_bp:.2f} bp/day",help=f"Needs 10 observations in the current contract regime. Currently {int(s.current_regime_obs)}/10.")
+c5.metric("Current mean-reversion","Building new roll history" if pd.isna(s.ou_half_life_obs) else f"{s.ou_half_life_obs:.1f} obs",help=f"Needs 20 observations in the current contract regime. Currently {int(s.current_regime_obs)}/20.")
 c6.metric("Previous regime half-life","N/A" if pm is None else f"{pm.half_life_obs:.1f} obs")
 
 # Xover vs Main comparison
@@ -224,12 +224,27 @@ with left:
     st.plotly_chart(f,use_container_width=True)
 with right:
     st.subheader("Rolling z-score")
+    st.caption("Gaps are intentional at index rolls. The z-score is restarted for each new contract regime so the old and new index series are not mixed.")
     z=go.Figure()
     z.add_trace(go.Scatter(x=hp.date,y=hp.zscore_20,mode="lines",name="20D"))
     z.add_trace(go.Scatter(x=hp.date,y=hp.zscore_60,mode="lines",name="60D"))
     z.add_hline(y=0,opacity=.25); z.add_hline(y=2,line_dash="dot",opacity=.25); z.add_hline(y=-2,line_dash="dot",opacity=.25)
     z.update_layout(height=320,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="z",xaxis_title=None)
     st.plotly_chart(z,use_container_width=True)
+
+# Transaction activity / liquidity
+if "trade_count" in h.columns and h["trade_count"].notna().any():
+    st.subheader("Transaction activity")
+    st.caption("Daily number of filtered on-the-run CDS transactions and aggregate reported notional from the public transaction tape. Reported notional is a market-activity measure, not open interest.")
+    vleft,vright=st.columns(2)
+    with vleft:
+        vf=go.Figure(go.Bar(x=hp.date,y=hp.trade_count,name="Trades"))
+        vf.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="Transactions",xaxis_title=None)
+        st.plotly_chart(vf,use_container_width=True)
+    with vright:
+        nf=go.Figure(go.Bar(x=hp.date,y=hp.reported_notional_eur/1e6,name="Reported notional"))
+        nf.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="EUR millions",xaxis_title=None)
+        st.plotly_chart(nf,use_container_width=True)
 
 # Persistence
 st.subheader("Persistence and mean reversion")
