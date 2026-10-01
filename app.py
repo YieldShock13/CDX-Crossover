@@ -223,13 +223,18 @@ with left:
     f.update_layout(height=320,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="bp",xaxis_title=None)
     st.plotly_chart(f,use_container_width=True)
 with right:
-    st.subheader("Rolling z-score")
-    st.caption("Gaps are intentional at index rolls. The z-score is restarted for each new contract regime so the old and new index series are not mixed.")
+    st.subheader("Relative rolling z-score")
+    st.caption("Compares Xover, Main and Xover–Main on the same standardized scale. Gaps are intentional at index rolls; each series restarts within its new contract regime.")
     z=go.Figure()
-    z.add_trace(go.Scatter(x=hp.date,y=hp.zscore_20,mode="lines",name="20D"))
-    z.add_trace(go.Scatter(x=hp.date,y=hp.zscore_60,mode="lines",name="60D"))
+    for nm in ["Xover","Main","Xover-Main"]:
+        zh=hist.loc[hist.series.eq(nm)].sort_values("date").copy()
+        if choice not in ("All","Custom"):
+            zh=zh.loc[zh.date>=zh.date.max()-pd.Timedelta(days=ranges[choice])]
+        elif choice=="Custom":
+            zh=zh.loc[zh.date.between(pd.Timestamp(lo),pd.Timestamp(hi))]
+        z.add_trace(go.Scatter(x=zh.date,y=zh.zscore_20,mode="lines",name=f"{nm} 20D"))
     z.add_hline(y=0,opacity=.25); z.add_hline(y=2,line_dash="dot",opacity=.25); z.add_hline(y=-2,line_dash="dot",opacity=.25)
-    z.update_layout(height=320,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="z",xaxis_title=None)
+    z.update_layout(height=320,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="z",xaxis_title=None,legend=dict(orientation="h"))
     st.plotly_chart(z,use_container_width=True)
 
 # Transaction activity / liquidity
