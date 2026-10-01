@@ -25,7 +25,7 @@ if not HIST.exists() or not SNAP.exists():
 hist=pd.read_csv(HIST,parse_dates=["date"]); snap=pd.read_csv(SNAP,parse_dates=["date"])
 models=pd.read_csv(MODELS,parse_dates=["start","end"]) if MODELS.exists() else pd.DataFrame()
 rolls=pd.read_csv(ROLLS,parse_dates=["date"]) if ROLLS.exists() else pd.DataFrame()
-contracts=pd.read_csv(CONTRACTS,parse_dates=["date","maturity"]) if CONTRACTS.exists() else pd.DataFrame()
+CONTRACTS = DATA / "cds_contract_series.csv"\ncontracts=pd.read_csv(CONTRACTS,parse_dates=["date","maturity"]) if CONTRACTS.exists() else pd.DataFrame()
 latest_date=hist.date.max()
 
 def row(name): return snap.loc[snap.series.eq(name)].iloc[-1]
