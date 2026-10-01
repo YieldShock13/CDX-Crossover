@@ -151,6 +151,18 @@ for name,c in cfg.items():
 
 pd.DataFrame(snaps).to_csv(OUT/"cds_dashboard_snapshot.csv",index=False)
 pd.concat(charts,ignore_index=True).to_csv(OUT/"cds_dashboard_history.csv",index=False)
+
+# Actual traded on-the-run contract/index-series history.
+contracts=pd.concat([
+    xo.rename(columns={"trade_date":"date","xover_bp":"spread_bp","xover_maturity":"maturity",
+                       "xover_trades":"trade_count","xover_reported_notional_eur":"reported_notional_eur"})
+      [["date","spread_bp","maturity","trade_count","reported_notional_eur"]].assign(series="Xover"),
+    mn.rename(columns={"trade_date":"date","main_bp":"spread_bp","main_maturity":"maturity",
+                       "main_trades":"trade_count","main_reported_notional_eur":"reported_notional_eur"})
+      [["date","spread_bp","maturity","trade_count","reported_notional_eur"]].assign(series="Main")
+],ignore_index=True).sort_values(["series","date"])
+contracts["index_series_id"]=contracts.groupby("series")["maturity"].transform(lambda x:x.ne(x.shift()).cumsum())
+contracts.to_csv(OUT/"cds_contract_series.csv",index=False)
 ou.to_csv(OUT/"cds_dashboard_model_history.csv",index=False)
 rolls=[]
 for _,r in df.iterrows():
