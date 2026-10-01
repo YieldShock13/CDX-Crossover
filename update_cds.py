@@ -61,7 +61,10 @@ def clean(raw, kind):
     o=o.loc[keep].sort_values(["trade_date","execution_timestamp"])
     prefix="xover" if kind=="Xover" else "main"
     d=(o.groupby("trade_date",as_index=False)
-        .agg(**{f"{prefix}_bp":("spread_bp","median"),f"{prefix}_maturity":("maturity_date","first")})
+        .agg(**{f"{prefix}_bp":("spread_bp","median"),
+                f"{prefix}_maturity":("maturity_date","first"),
+                f"{prefix}_trades":("trade_key","nunique"),
+                f"{prefix}_reported_notional_eur":("notional_amount","sum")})
         .sort_values("trade_date").reset_index(drop=True))
     d[f"{prefix}_roll"]=d[f"{prefix}_maturity"].ne(d[f"{prefix}_maturity"].shift())
     d.loc[0,f"{prefix}_roll"]=False
@@ -123,12 +126,12 @@ ou=pd.concat([ou_table(df,"xover_bp","xover_regime","Xover"),
 if len(ou): ou["persistence"]=ou.phi.apply(persistence)
 
 cfg={
-"Xover":("xover_bp","xover_change_1d","xover_change_5obs","xover_change_20obs","xover_z20","xover_z60","xover_vol20","xover_vol60","xover_regime_percentile","xover_regime"),
-"Main":("main_bp","main_change_1d","main_change_5obs","main_change_20obs","main_z20","main_z60","main_vol20","main_vol60","main_regime_percentile","main_regime"),
-"Xover-Main":("rv_bp","rv_change_1d","rv_change_5obs","rv_change_20obs","rv_z20","rv_z60","rv_vol20","rv_vol60","rv_regime_percentile","rv_regime")}
+"Xover":("xover_bp","xover_change_1d","xover_change_5obs","xover_change_20obs","xover_z20","xover_z60","xover_vol20","xover_vol60","xover_regime_percentile","xover_regime","xover_trades","xover_reported_notional_eur"),
+"Main":("main_bp","main_change_1d","main_change_5obs","main_change_20obs","main_z20","main_z60","main_vol20","main_vol60","main_regime_percentile","main_regime","main_trades","main_reported_notional_eur"),
+"Xover-Main":("rv_bp","rv_change_1d","rv_change_5obs","rv_change_20obs","rv_z20","rv_z60","rv_vol20","rv_vol60","rv_regime_percentile","rv_regime",None,None)}
 latest=df.iloc[-1]; snaps=[]; charts=[]
 for name,c in cfg.items():
-    level,ch,c5,c20,z20,z60,v20,v60,pct,reg=c; rg=latest[reg]; obs=int((df[reg]==rg).sum())
+    level,ch,c5,c20,z20,z60,v20,v60,pct,reg,trades,notional=c; rg=latest[reg]; obs=int((df[reg]==rg).sum())
     mm=ou[(ou.series==name)&(ou.regime==rg)] if len(ou) else pd.DataFrame()
     m=mm.iloc[-1] if len(mm) else None
     snaps.append(dict(series=name,date=latest.trade_date,level_bp=latest[level],change_1d_bp=latest[ch],
@@ -138,6 +141,12 @@ for name,c in cfg.items():
       persistence="N/A" if m is None else persistence(m.phi),current_regime=rg,current_regime_obs=obs))
     q=df[["trade_date",level,ch,z20,z60,v20,v60,pct,reg]].copy()
     q.columns=["date","level_bp","change_1d_bp","zscore_20","zscore_60","realized_vol_20_bp","realized_vol_60_bp","current_series_percentile","regime"]
+    if trades is not None:
+        q["trade_count"]=df[trades].values
+        q["reported_notional_eur"]=df[notional].values
+    else:
+        q["trade_count"]=np.nan
+        q["reported_notional_eur"]=np.nan
     q["series"]=name; charts.append(q)
 
 pd.DataFrame(snaps).to_csv(OUT/"cds_dashboard_snapshot.csv",index=False)
