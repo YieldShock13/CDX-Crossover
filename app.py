@@ -25,6 +25,7 @@ if not HIST.exists() or not SNAP.exists():
 hist=pd.read_csv(HIST,parse_dates=["date"]); snap=pd.read_csv(SNAP,parse_dates=["date"])
 models=pd.read_csv(MODELS,parse_dates=["start","end"]) if MODELS.exists() else pd.DataFrame()
 rolls=pd.read_csv(ROLLS,parse_dates=["date"]) if ROLLS.exists() else pd.DataFrame()
+contracts=pd.read_csv(CONTRACTS,parse_dates=["date","maturity"]) if CONTRACTS.exists() else pd.DataFrame()
 latest_date=hist.date.max()
 
 def row(name): return snap.loc[snap.series.eq(name)].iloc[-1]
@@ -250,6 +251,23 @@ if "trade_count" in h.columns and h["trade_count"].notna().any():
         nf=go.Figure(go.Bar(x=hp.date,y=hp.reported_notional_eur/1e6,name="Reported notional"))
         nf.update_layout(height=300,margin=dict(l=10,r=10,t=10,b=10),yaxis_title="EUR millions",xaxis_title=None)
         st.plotly_chart(nf,use_container_width=True)
+
+# Actual traded index series / roll transparency
+st.subheader("Actual traded index series")
+st.caption("These are the unadjusted on-the-run contracts actually observed in the DTCC tape. A new line starts when the market rolls to a new iTraxx series/maturity. This view is kept separate from any future roll-adjusted analytical series.")
+if not contracts.empty:
+    cc=contracts.loc[contracts.series.eq(series if series!="Xover-Main" else "Xover")].sort_values("date").copy()
+    if choice not in ("All","Custom"):
+        cc=cc.loc[cc.date>=cc.date.max()-pd.Timedelta(days=ranges[choice])]
+    elif choice=="Custom":
+        cc=cc.loc[cc.date.between(pd.Timestamp(lo),pd.Timestamp(hi))]
+    cf=go.Figure()
+    for mat,gc in cc.groupby("maturity"):
+        cf.add_trace(go.Scatter(x=gc.date,y=gc.spread_bp,mode="lines",name=f"Matures {pd.Timestamp(mat).date()}"))
+    cf.update_layout(height=330,margin=dict(l=10,r=10,t=10,b=10),hovermode="x unified",yaxis_title="Spread (bp)",xaxis_title=None,legend=dict(orientation="h"))
+    st.plotly_chart(cf,use_container_width=True)
+    latest_contract=cc.iloc[-1]
+    st.caption(f"Current displayed contract maturity: {pd.Timestamp(latest_contract.maturity).date()} · Reported notional volume and trade count are retained for every daily observation.")
 
 # Persistence
 st.subheader("Persistence and mean reversion")
